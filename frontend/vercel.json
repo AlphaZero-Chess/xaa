@@ -3,9 +3,6 @@
   "framework": "create-react-app",
   "buildCommand": "yarn build",
   "outputDirectory": "build",
-  "env": {
-    "REACT_APP_BACKEND_URL": "@backend_url"
-  },
   "rewrites": [
     {
       "source": "/(.*)",

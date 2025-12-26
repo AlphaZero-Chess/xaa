@@ -10,7 +10,40 @@ const requireBackendUrl = () => {
       "Missing REACT_APP_BACKEND_URL. Set it in your environment (must include '/api' prefix).",
     );
   }
+
+  // Guard rail:
+  // If the app is deployed (e.g. on Vercel) and the backend URL is a relative path (like '/api'),
+  // requests will go to the frontend origin and typically return index.html (HTML) -> JSON parse errors.
+  const isDeployedHost =
+    typeof window !== 'undefined' &&
+    window.location &&
+    window.location.hostname &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1';
+
+  if (isDeployedHost && BACKEND_URL.startsWith('/')) {
+    throw new Error(
+      "REACT_APP_BACKEND_URL is set to a relative path ('/api') but the app is running on a deployed host. " +
+        "Set REACT_APP_BACKEND_URL to your FULL backend URL including '/api' (e.g. https://xaax.onrender.com/api) " +
+        "for BOTH Preview and Production on Vercel.",
+    );
+  }
+
   return BACKEND_URL;
+};
+
+const safeJson = async (response) => {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    // This usually means we got HTML (index.html) instead of JSON.
+    throw new Error(
+      `Backend returned a non-JSON response (status ${response.status}). ` +
+        `This usually means REACT_APP_BACKEND_URL is pointing at the frontend instead of the backend. ` +
+        `First 80 chars: ${text.slice(0, 80)}`,
+    );
+  }
 };
 
 const joinUrl = (base, path) => {
@@ -40,10 +73,10 @@ export const browserApi = {
       headers: { 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const error = await response.json();
+      const error = await safeJson(response).catch(() => ({}));
       throw new Error(error.detail || 'Failed to create session');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Close a browser session
@@ -52,20 +85,20 @@ export const browserApi = {
       method: 'DELETE',
     });
     if (!response.ok) {
-      const error = await response.json();
+      const error = await safeJson(response).catch(() => ({}));
       throw new Error(error.detail || 'Failed to close session');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Get session status
   getSessionStatus: async (sessionId) => {
     const response = await fetch(joinUrl(requireBackendUrl(), `/browser/session/${sessionId}/status`));
     if (!response.ok) {
-      const error = await response.json();
+      const error = await safeJson(response).catch(() => ({}));
       throw new Error(error.detail || 'Failed to get session status');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Navigate to URL
@@ -76,10 +109,10 @@ export const browserApi = {
       body: JSON.stringify({ url, tab_id: tabId }),
     });
     if (!response.ok) {
-      const error = await response.json();
+      const error = await safeJson(response).catch(() => ({}));
       throw new Error(error.detail || 'Navigation failed');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Go back
@@ -88,7 +121,7 @@ export const browserApi = {
     const response = await fetch(joinUrl(requireBackendUrl(), path), {
       method: 'POST',
     });
-    return response.json();
+    return safeJson(response);
   },
 
   // Go forward
@@ -97,7 +130,7 @@ export const browserApi = {
     const response = await fetch(joinUrl(requireBackendUrl(), path), {
       method: 'POST',
     });
-    return response.json();
+    return safeJson(response);
   },
 
   // Refresh page
@@ -106,7 +139,7 @@ export const browserApi = {
     const response = await fetch(joinUrl(requireBackendUrl(), path), {
       method: 'POST',
     });
-    return response.json();
+    return safeJson(response);
   },
 
   // Get screenshot
@@ -116,7 +149,7 @@ export const browserApi = {
     if (!response.ok) {
       throw new Error('Failed to get screenshot');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Tabs (real Playwright pages)
@@ -125,7 +158,7 @@ export const browserApi = {
     if (!response.ok) {
       throw new Error('Failed to list tabs');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   createTab: async (sessionId, url = null, makeActive = true) => {
@@ -138,7 +171,7 @@ export const browserApi = {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.detail || 'Failed to create tab');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   activateTab: async (sessionId, tabId) => {
@@ -149,7 +182,7 @@ export const browserApi = {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.detail || 'Failed to activate tab');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   closeTab: async (sessionId, tabId) => {
@@ -160,7 +193,7 @@ export const browserApi = {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.detail || 'Failed to close tab');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Click
@@ -170,7 +203,7 @@ export const browserApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ x, y, button }),
     });
-    return response.json();
+    return safeJson(response);
   },
 
   // Type text
@@ -180,7 +213,7 @@ export const browserApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
-    return response.json();
+    return safeJson(response);
   },
 
   // Key press
@@ -190,7 +223,7 @@ export const browserApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, modifiers }),
     });
-    return response.json();
+    return safeJson(response);
   },
 
   // Scroll
@@ -200,7 +233,7 @@ export const browserApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ delta_x: deltaX, delta_y: deltaY }),
     });
-    return response.json();
+    return safeJson(response);
   },
 
   // Create WebSocket connection
@@ -223,7 +256,7 @@ export const extensionsApi = {
     if (!response.ok) {
       throw new Error('Failed to fetch extensions');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Load unpacked extension
@@ -237,7 +270,7 @@ export const extensionsApi = {
       const error = await response.json();
       throw new Error(error.detail || 'Failed to load extension');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Pack extension
@@ -251,7 +284,7 @@ export const extensionsApi = {
       const error = await response.json();
       throw new Error(error.detail || 'Failed to pack extension');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Toggle extension
@@ -264,7 +297,7 @@ export const extensionsApi = {
     if (!response.ok) {
       throw new Error('Failed to toggle extension');
     }
-    return response.json();
+    return safeJson(response);
   },
 
   // Remove extension
@@ -275,7 +308,7 @@ export const extensionsApi = {
     if (!response.ok) {
       throw new Error('Failed to remove extension');
     }
-    return response.json();
+    return safeJson(response);
   },
 };
 
@@ -293,7 +326,7 @@ export const searchApi = {
     if (!response.ok) {
       return { suggestions: [], query };
     }
-    return response.json();
+    return safeJson(response);
   },
 };
 

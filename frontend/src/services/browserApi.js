@@ -205,15 +205,13 @@ export const browserApi = {
 
   // Create WebSocket connection
   createWebSocket: (sessionId) => {
-    // IMPORTANT: In this environment, the backend is mounted behind the same origin
-    // under '/api'. WebSockets MUST go through the same '/api' base path so ingress
-    // routes them correctly.
-    // For local dev, REACT_APP_BACKEND_URL is '/api', so this becomes ws(s)://<host>/api/browser/ws/<id>
-    const apiBase = requireBackendUrl();
-    const apiUrl = new URL(apiBase, window.location.origin);
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsBasePath = apiUrl.pathname.replace(/\/+$/, "");
-    return new WebSocket(`${wsProtocol}//${window.location.host}${wsBasePath}/browser/ws/${sessionId}`);
+    // IMPORTANT:
+    // - In local dev, REACT_APP_BACKEND_URL is typically '/api' (same-origin), so WS should connect to this same origin.
+    // - In production (Vercel frontend + Render backend), REACT_APP_BACKEND_URL is an absolute URL like:
+    //     https://xaax.onrender.com/api
+    //   In that case, WS MUST connect to the backend host (NOT window.location.host).
+    const wsBaseUrl = getWsUrl(); // e.g. 'wss://xaax.onrender.com/api' or 'ws://localhost:8001/api'
+    return new WebSocket(`${wsBaseUrl}/browser/ws/${sessionId}`);
   },
 };
 
